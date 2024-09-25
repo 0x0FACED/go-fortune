@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/0x0FACED/go-fortune/pkg/logger"
 	"github.com/0x0FACED/go-fortune/pkg/voronoi"
+	"github.com/0x0FACED/go-fortune/static"
 
 	"github.com/go-echarts/go-echarts/v2/charts"
 	"github.com/go-echarts/go-echarts/v2/opts"
@@ -32,18 +32,12 @@ func generateStations(n int, width, height int) []Station {
 	return stations
 }
 
-// Преобразуем voronoi границы в Echarts для отображения
-func voronoiToEcharts(stations []Station, diagram *voronoi.Diagram) *charts.Scatter {
-	scatter := charts.NewScatter()
-
-	points := make([]opts.ScatterData, 0)
-	for _, station := range stations {
-		points = append(points, opts.ScatterData{
-			Value: []float64{station.X, station.Y},
-		})
-	}
-
+func prepareScatter(scatter *charts.Scatter) {
 	scatter.SetGlobalOptions(
+		charts.WithInitializationOpts(opts.Initialization{
+			Height: "580px",
+			Width:  "1020px",
+		}),
 		charts.WithLegendOpts(opts.Legend{
 			TextStyle: &opts.TextStyle{
 				Color: "white",
@@ -61,12 +55,18 @@ func voronoiToEcharts(stations []Station, diagram *voronoi.Diagram) *charts.Scat
 			AxisLabel: &opts.AxisLabel{
 				Color: "white",
 			},
+			SplitLine: &opts.SplitLine{
+				Show: opts.Bool(false),
+			},
 		}),
 		charts.WithYAxisOpts(opts.YAxis{
 			Type: "value",
 			Name: "Высота",
 			AxisLabel: &opts.AxisLabel{
 				Color: "white",
+			},
+			SplitLine: &opts.SplitLine{
+				Show: opts.Bool(false),
 			},
 		}),
 		charts.WithDataZoomOpts(opts.DataZoom{
@@ -84,46 +84,53 @@ func voronoiToEcharts(stations []Station, diagram *voronoi.Diagram) *charts.Scat
 			Orient:     "vertical",
 		}),
 	)
+}
+
+// Преобразуем voronoi границы в Echarts для отображения
+func voronoiToEcharts(stations []Station, diagram *voronoi.Diagram) *charts.Scatter {
+	scatter := charts.NewScatter()
+
+	points := make([]opts.ScatterData, 0)
+	for _, station := range stations {
+		points = append(points, opts.ScatterData{
+			Value: []float64{station.X, station.Y},
+		})
+	}
+
+	// Дизайним скаттер
+	prepareScatter(scatter)
 
 	scatter.AddSeries("Станции", points).
 		SetSeriesOptions(
 			charts.WithItemStyleOpts(opts.ItemStyle{
-				Color: "red",
+				Color: "lightgreen",
 			}),
 		)
 
 	for _, edge := range diagram.Edges {
-		if &edge.Va != nil && &edge.Vb != nil {
-			line := charts.NewLine()
-			line.SetGlobalOptions(
-				charts.WithXAxisOpts(opts.XAxis{Show: opts.Bool(true)}),
-				charts.WithYAxisOpts(opts.YAxis{Show: opts.Bool(true)}),
-			)
+		line := charts.NewLine()
+		line.SetGlobalOptions(
+			charts.WithXAxisOpts(opts.XAxis{Show: opts.Bool(true)}),
+			charts.WithYAxisOpts(opts.YAxis{Show: opts.Bool(true)}),
+		)
 
-			// Добавляем серию для границ с синим цветом
-			line.AddSeries("Границы", []opts.LineData{
-				{Value: []float64{edge.Va.X, edge.Va.Y}},
-				{Value: []float64{edge.Vb.X, edge.Vb.Y}},
-			}).SetSeriesOptions(
-				charts.WithLineStyleOpts(opts.LineStyle{
-					Width: 2, // Толщина линий
-				}),
-			)
+		line.AddSeries("Границы", []opts.LineData{
+			{Value: []float64{edge.Va.X, edge.Va.Y}},
+			{Value: []float64{edge.Vb.X, edge.Vb.Y}},
+		}).SetSeriesOptions(
+			charts.WithLineStyleOpts(opts.LineStyle{
+				Width: 2,
+			}),
+		)
 
-			scatter.Overlap(line)
-		}
+		scatter.Overlap(line)
 	}
 
 	return scatter
 }
 
-func flushLogs() {
-	GlobalLogs = make([]string, 0)
-}
-
 // http обработчик страницы с диаграмой и формой для ввода данных
 func diagramHandler(w http.ResponseWriter, r *http.Request) {
-	flushLogs()
 	width := 1000
 	height := 1000
 	numStations := 10
@@ -159,105 +166,7 @@ func diagramHandler(w http.ResponseWriter, r *http.Request) {
 	scatter := voronoiToEcharts(stations, diagram)
 
 	// Генерация HTML-страницы с обновленной диаграммой и логами
-	fmt.Fprintln(w, `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Диаграмма Вороного</title>
-		<style>
-			body {
-				background-color: #1E1E1E; /* Темный фон для всей страницы */
-				color: #d3d3d3; /* Светло-серый текст */
-				font-family: Consolas, monospace;
-				overflow: hidden; /* Запретить прокрутку */
-			}
-
-			#container {
-				display: flex;
-				width: 100%;
-				height: 100vh;
-				box-sizing: border-box;
-			}
-
-			#left-container {
-				width: 50%;
-				padding: 10px;
-				box-sizing: border-box;
-			}
-
-			#right-container {
-				width: 50%;
-				padding: 10px;
-				box-sizing: border-box;
-				border-left: 1px solid #444; /* Темная граница для правого контейнера */
-				overflow-y: auto; /* Вертикальная прокрутка для логов */
-				background-color: #1e1e1e; /* Темный фон для контейнера логов */
-			}
-
-			#logs {
-				white-space: pre-wrap; /* Сохраняем пробелы и переносим строки */
-				word-wrap: break-word; /* Перенос длинных слов */
-				color: #d3d3d3; /* Цвет текста в логах — светло-серый */
-				font-family: Consolas, monospace; /* Моноширинный шрифт для логов */
-			}
-
-			#chart-container {
-				width: 100%;
-				height: 400px;
-			}
-
-			input[type="number"],
-			input[type="submit"] {
-				background-color: #2b2b2b; /* Темный фон для полей ввода */
-				color: #d3d3d3; /* Светло-серый текст для полей */
-				border: 1px solid #444; /* Темная граница */
-				padding: 5px;
-				margin: 5px 0;
-				border-radius: 4px;
-			}
-
-			label {
-				color: #d3d3d3; /* Светло-серый цвет для текста меток */
-			}
-
-			h1 {
-				color: #d3d3d3; /* Цвет заголовка светло-серый */
-			}
-
-			input[type="submit"]:hover {
-				background-color: #444; /* Немного светлее при наведении */
-				cursor: pointer;
-			}
-
-			/* Добавление стилей для темной темы */
-			::-webkit-scrollbar {
-				width: 8px;
-			}
-
-			::-webkit-scrollbar-thumb {
-				background-color: #444; /* Цвет ползунка */
-				border-radius: 10px;
-			}
-
-			::-webkit-scrollbar-track {
-				background-color: #2b2b2b; /* Цвет области прокрутки */
-			}
-        </style>
-    </head>
-    <body>
-        <div id="container">
-            <div id="left-container">
-                <h1>Параметры для диаграммы Вороного</h1>
-                <form id="diagram-form" method="POST">
-                    <label for="width">Ширина (W):</label>
-                    <input type="number" id="width" name="width" value="1000" min="100" max="5000"><br><br>
-                    <label for="height">Высота (H):</label>
-                    <input type="number" id="height" name="height" value="1000" min="100" max="5000"><br><br>
-                    <label for="stations">Количество станций (n):</label>
-                    <input type="number" id="stations" name="stations" value="10" min="1" max="200"><br><br>
-                    <input type="submit" value="Построить">
-                </form>
-    `)
+	fmt.Fprintln(w, static.Part1)
 
 	// Встраиваем диаграмму в HTML
 	err := scatter.Render(w)
@@ -265,69 +174,14 @@ func diagramHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("Ошибка рендеринга диаграммы:", err)
 	}
 
-	fmt.Fprintln(w, `
-            </div>
-            <div id="right-container">
-                <h1>Логи</h1>
-                <div id="logs">`)
+	fmt.Fprintln(w, static.Part2)
 
 	// Вставляем логи в HTML
 	for _, log := range logger.Logs {
 		fmt.Fprintln(w, log)
 	}
 
-	fmt.Fprintln(w, `
-                </div>
-            </div>
-        </div>
-
-        <script>
-            document.getElementById('diagram-form').addEventListener('submit', function (e) {
-                e.preventDefault();
-                const formData = new FormData(this);
-                const params = new URLSearchParams(formData).toString();
-
-                // Отправка данных формы
-                fetch('/', {
-                    method: 'POST',
-                    body: params,
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    }
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Ошибка при отправке данных');
-                    }
-                    return response.text(); // Получаем HTML-ответ с обновленной диаграммой и логами
-                })
-                .then(html => {
-                    document.open(); // Очищаем текущую страницу
-                    document.write(html); // Записываем обновленный HTML
-                    document.close(); // Закрываем поток
-                })
-                .catch(error => {
-                    console.error('Ошибка:', error);
-                });
-            });
-        </script>
-    </body>
-    </html>
-    `)
-}
-
-var GlobalLogs []string
-
-func logHandler(w http.ResponseWriter, r *http.Request) {
-	AddLog("Лог 1: Выполнен запрос на построение диаграммы")
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"logs": GlobalLogs,
-	})
-}
-
-func AddLog(message string) {
-	GlobalLogs = append(GlobalLogs, message)
+	fmt.Fprintln(w, static.Part3)
 }
 
 func main() {
