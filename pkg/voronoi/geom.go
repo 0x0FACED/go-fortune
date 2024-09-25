@@ -11,71 +11,53 @@ type Vertex struct {
 
 var NO_VERTEX = Vertex{math.Inf(1), math.Inf(1)}
 
-type Vertices []Vertex
+type vetrices []Vertex
 
-func (s Vertices) Len() int      { return len(s) }
-func (s Vertices) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s vetrices) Len() int      { return len(s) }
+func (s vetrices) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
-type VerticesByY struct{ Vertices }
+type verticesByY struct{ vetrices }
 
-func (s VerticesByY) Less(i, j int) bool { return s.Vertices[i].Y < s.Vertices[j].Y }
+func (s verticesByY) Less(i, j int) bool { return s.vetrices[i].Y < s.vetrices[j].Y }
 
-type EdgeVertex struct {
+type edgeVertex struct {
 	Vertex
-	Edges []*Edge
+	Edges []*edge
 }
 
-type Edge struct {
+type edge struct {
 	LeftCell  *Cell
 	RightCell *Cell
-	Va        EdgeVertex
-	Vb        EdgeVertex
+	Va        edgeVertex
+	Vb        edgeVertex
 }
 
-func (e *Edge) GetOtherCell(cell *Cell) *Cell {
-	if cell == e.LeftCell {
-		return e.RightCell
-	} else if cell == e.RightCell {
-		return e.LeftCell
-	}
-	return nil
-}
-
-func (e *Edge) GetOtherEdgeVertex(v Vertex) EdgeVertex {
-	if v == e.Va.Vertex {
-		return e.Vb
-	} else if v == e.Vb.Vertex {
-		return e.Va
-	}
-	return EdgeVertex{NO_VERTEX, nil}
-}
-
-func newEdge(LeftCell, RightCell *Cell) *Edge {
-	return &Edge{
+func newEdge(LeftCell, RightCell *Cell) *edge {
+	return &edge{
 		LeftCell:  LeftCell,
 		RightCell: RightCell,
-		Va:        EdgeVertex{NO_VERTEX, nil},
-		Vb:        EdgeVertex{NO_VERTEX, nil},
+		Va:        edgeVertex{NO_VERTEX, nil},
+		Vb:        edgeVertex{NO_VERTEX, nil},
 	}
 }
 
-type Halfedge struct {
+type halfEdge struct {
 	Cell  *Cell
-	Edge  *Edge
+	Edge  *edge
 	Angle float64
 }
 
-type Halfedges []*Halfedge
+type halfEdges []*halfEdge
 
-func (s Halfedges) Len() int      { return len(s) }
-func (s Halfedges) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s halfEdges) Len() int      { return len(s) }
+func (s halfEdges) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
-type halfedgesByAngle struct{ Halfedges }
+type halfEdgesByAngle struct{ halfEdges }
 
-func (s halfedgesByAngle) Less(i, j int) bool { return s.Halfedges[i].Angle > s.Halfedges[j].Angle }
+func (s halfEdgesByAngle) Less(i, j int) bool { return s.halfEdges[i].Angle > s.halfEdges[j].Angle }
 
-func newHalfedge(edge *Edge, LeftCell, RightCell *Cell) *Halfedge {
-	ret := &Halfedge{
+func newHalfEdge(edge *edge, LeftCell, RightCell *Cell) *halfEdge {
+	ret := &halfEdge{
 		Cell: LeftCell,
 		Edge: edge,
 	}
@@ -95,7 +77,7 @@ func newHalfedge(edge *Edge, LeftCell, RightCell *Cell) *Halfedge {
 	return ret
 }
 
-func (h *Halfedge) GetStartpoint() Vertex {
+func (h *halfEdge) startPoint() Vertex {
 	if h.Edge.LeftCell == h.Cell {
 		return h.Edge.Va.Vertex
 	}
@@ -103,7 +85,7 @@ func (h *Halfedge) GetStartpoint() Vertex {
 
 }
 
-func (h *Halfedge) GetEndpoint() Vertex {
+func (h *halfEdge) endPoint() Vertex {
 	if h.Edge.LeftCell == h.Cell {
 		return h.Edge.Vb.Vertex
 	}

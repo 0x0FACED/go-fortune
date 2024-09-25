@@ -4,7 +4,7 @@ import "sort"
 
 type Cell struct {
 	Site      Vertex
-	Halfedges []*Halfedge
+	Halfedges []*halfEdge
 }
 
 func newCell(site Vertex) *Cell {
@@ -24,7 +24,7 @@ func (t *Cell) prepare() int {
 		}
 	}
 
-	sort.Sort(halfedgesByAngle{halfedges})
+	sort.Sort(halfEdgesByAngle{halfedges})
 	t.Halfedges = halfedges
 	return len(halfedges)
 }
