@@ -93,11 +93,15 @@ var (
                 <h1>Параметры для диаграммы Вороного</h1>
                 <form id="diagram-form" method="POST">
                     <label for="width">Ширина (W):</label>
-                    <input type="number" id="width" name="width" value="1000" min="100" max="5000"><br><br>
+                    <input type="number" id="width" name="width" value="1000" min="100" max="5000"><br>
                     <label for="height">Высота (H):</label>
-                    <input type="number" id="height" name="height" value="1000" min="100" max="5000"><br><br>
+                    <input type="number" id="height" name="height" value="1000" min="100" max="5000"><br>
                     <label for="stations">Количество станций (n):</label>
-                    <input type="number" id="stations" name="stations" value="10" min="1" max="200"><br><br>
+                    <input type="number" id="stations" name="stations" value="12" min="1" max="200"><br>
+	
+					<label for="random">Генерировать случайные станции?</label>
+					<input type="checkbox" id="random" name="random" value="true"><br>
+
                     <input type="submit" value="Построить">
                 </form>
     `

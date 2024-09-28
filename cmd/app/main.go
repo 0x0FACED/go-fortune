@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"net/http"
 	"strconv"
@@ -20,7 +21,7 @@ type Station struct {
 }
 
 // Генерируем случайные точки для станций
-func generateStations(n int, width, height int) []Station {
+func generateRandStations(n int, width, height int) []Station {
 	stations := make([]Station, n)
 	rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := 0; i < n; i++ {
@@ -32,6 +33,30 @@ func generateStations(n int, width, height int) []Station {
 	return stations
 }
 
+func generateFixStations(n int, width, height int) []Station {
+	stations := make([]Station, 0, n)
+
+	rows := int(math.Sqrt(float64(n)))
+	cols := (n + rows - 1) / rows
+
+	xStep := float64(width) / float64(cols)
+	yStep := float64(height) / float64(rows)
+
+	for i := 0; i < rows; i++ {
+		for j := 0; j < cols; j++ {
+			// условие нужно, ибо строк и столбцов может быть, например, на 20 станций, а мы 16-17 генерим
+			if len(stations) < n {
+				x := xStep/2 + float64(j)*xStep
+				y := yStep/2 + float64(i)*yStep
+				stations = append(stations, Station{X: x, Y: y})
+			} else { // ломаем цикл
+				break
+			}
+		}
+	}
+
+	return stations
+}
 func prepareScatter(scatter *charts.Scatter) {
 	scatter.SetGlobalOptions(
 		charts.WithInitializationOpts(opts.Initialization{
@@ -133,42 +158,40 @@ func voronoiToEcharts(stations []Station, diagram *voronoi.Diagram) *charts.Scat
 func diagramHandler(w http.ResponseWriter, r *http.Request) {
 	width := 1000
 	height := 1000
-	numStations := 10
+	numStations := 12
+	var isRandom bool
 
 	if r.Method == http.MethodPost {
 		r.ParseForm()
 		width, _ = strconv.Atoi(r.FormValue("width"))
 		height, _ = strconv.Atoi(r.FormValue("height"))
 		numStations, _ = strconv.Atoi(r.FormValue("stations"))
-		fmt.Println("Data: ", width, height, numStations)
+		isRandom = r.FormValue("random") == "true"
+	}
+	var stations []Station
+
+	if isRandom {
+		stations = generateRandStations(numStations, width, height)
+	} else {
+		stations = generateFixStations(numStations, width, height)
 	}
 
-	// Генерация станций
-	stations := generateStations(numStations, width, height)
-
-	// Генерация точек для алгоритма Форчуна
 	var points []voronoi.Vertex
 	for _, station := range stations {
 		points = append(points, voronoi.Vertex{X: station.X, Y: station.Y})
 	}
 
-	// Создаем bounding box
 	bbox := voronoi.NewBoundingBox(0, float64(width), 0, float64(height))
 
-	// Создаем логгер для записи логов и вывода их на страницу
 	logger := logger.New()
 	defer logger.ClearLogs()
 
-	// Создаем диаграмму Вороного с логгером
 	diagram := voronoi.CreateDiagram(points, bbox, true, logger)
 
-	// Конвертация диаграммы в HTML через Echarts
 	scatter := voronoiToEcharts(stations, diagram)
 
-	// Генерация HTML-страницы с обновленной диаграммой и логами
 	fmt.Fprintln(w, static.Part1)
 
-	// Встраиваем диаграмму в HTML
 	err := scatter.Render(w)
 	if err != nil {
 		fmt.Println("Ошибка рендеринга диаграммы:", err)
