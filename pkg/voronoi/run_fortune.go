@@ -13,7 +13,7 @@ import (
 func CreateDiagram(sites []Vertex, bbox BoundingBox, closeCells bool, logger *logger.ZapLogger) *Diagram {
 	// sites - точки (вершины)
 	v := &Voronoi{
-		cellsMap: make(map[Vertex]*Cell),
+		cellsMap: make(map[Vertex]*cell),
 		Logger:   logger,
 	}
 
@@ -59,8 +59,9 @@ func CreateDiagram(sites []Vertex, bbox BoundingBox, closeCells bool, logger *lo
 		circle = v.firstCircleEvent
 
 		// добавляем beachsectiob
-		// Если точка не nil и при этом событие круга nil ИЛИ Y сайта меньше Y круга
-		// ИЛИ если Y координаты равны и Х сайма меньше круга
+
+		//Если site не nil, и либо события круга нет, либо Y новой точки меньше, чем Y круга,
+		// или Y совпадает, но X точки меньше, чем X круга — обрабатывается событие точки.
 		if site != nil && (circle == nil || site.Y < circle.y || (site.Y == circle.y && site.X < circle.x)) {
 			// Проверка на дубликат (нет смысла строить линии для точек, которые расположены
 			// на одинаковых координатах)
@@ -108,7 +109,7 @@ func CreateDiagram(sites []Vertex, bbox BoundingBox, closeCells bool, logger *lo
 		}
 	}
 
-	v.gatherVertexEdges()
+	//v.gatherVertexEdges()
 
 	return &Diagram{Edges: v.edges, Cells: v.cells}
 }
