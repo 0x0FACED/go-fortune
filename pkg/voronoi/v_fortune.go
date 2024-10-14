@@ -11,12 +11,12 @@ import (
 // Основная структура
 type Voronoi struct {
 	// ячейки диаграммы Вороного
-	cells []*Cell
+	cells []*cell
 	// ребра диаграммы Вороного
 	edges []*edge
 
 	// мапа для быстрого доступа к ячейке по координатам (ключу)
-	cellsMap map[Vertex]*Cell
+	cellsMap map[Vertex]*cell
 
 	// Пляжная линия (красно-черное дерево)
 	// динамические меняется при продвижении, охватывает всю высоту от 0 до H
@@ -31,11 +31,11 @@ type Voronoi struct {
 
 // Структура диаграммы
 type Diagram struct {
-	Cells []*Cell
+	Cells []*cell
 	Edges []*edge
 }
 
-func (s *Voronoi) cell(site Vertex) *Cell {
+func (s *Voronoi) cell(site Vertex) *cell {
 	ret := s.cellsMap[site]
 	if ret == nil {
 		panic(fmt.Sprintf("Couldn't find cell for site %v", site))
@@ -44,7 +44,7 @@ func (s *Voronoi) cell(site Vertex) *Cell {
 }
 
 // Создание ребра
-func (s *Voronoi) createEdge(LeftCell, RightCell *Cell, va, vb Vertex) *edge {
+func (s *Voronoi) createEdge(LeftCell, RightCell *cell, va, vb Vertex) *edge {
 	edge := newEdge(LeftCell, RightCell)
 	s.edges = append(s.edges, edge)
 	if va != NO_VERTEX {
@@ -58,12 +58,12 @@ func (s *Voronoi) createEdge(LeftCell, RightCell *Cell, va, vb Vertex) *edge {
 	lCell := LeftCell
 	rCell := RightCell
 
-	lCell.Halfedges = append(lCell.Halfedges, newHalfEdge(edge, LeftCell, RightCell))
-	rCell.Halfedges = append(rCell.Halfedges, newHalfEdge(edge, RightCell, LeftCell))
+	lCell.halfEdges = append(lCell.halfEdges, newHalfEdge(edge, LeftCell, RightCell))
+	rCell.halfEdges = append(rCell.halfEdges, newHalfEdge(edge, RightCell, LeftCell))
 	return edge
 }
 
-func (s *Voronoi) createBorderEdge(LeftCell *Cell, va, vb Vertex) *edge {
+func (s *Voronoi) createBorderEdge(LeftCell *cell, va, vb Vertex) *edge {
 	edge := newEdge(LeftCell, nil)
 	edge.Va.Vertex = va
 	edge.Vb.Vertex = vb
@@ -72,7 +72,7 @@ func (s *Voronoi) createBorderEdge(LeftCell *Cell, va, vb Vertex) *edge {
 	return edge
 }
 
-func (s *Voronoi) setEdgeStartpoint(edge *edge, LeftCell, RightCell *Cell, vertex Vertex) {
+func (s *Voronoi) setEdgeStartpoint(edge *edge, LeftCell, RightCell *cell, vertex Vertex) {
 	if edge.Va.Vertex == NO_VERTEX && edge.Vb.Vertex == NO_VERTEX {
 		edge.Va.Vertex = vertex
 		edge.LeftCell = LeftCell
@@ -84,15 +84,17 @@ func (s *Voronoi) setEdgeStartpoint(edge *edge, LeftCell, RightCell *Cell, verte
 	}
 }
 
-func (s *Voronoi) setEdgeEndpoint(edge *edge, LeftCell, RightCell *Cell, vertex Vertex) {
+func (s *Voronoi) setEdgeEndpoint(edge *edge, LeftCell, RightCell *cell, vertex Vertex) {
 	s.setEdgeStartpoint(edge, RightCell, LeftCell, vertex)
 }
 
 func (v *Voronoi) leftBreakPoint(arc *BeachSection, directrix float64) float64 {
+	// получаем сайт по дуге (сайт, с чьей дугой работаем)
 	site := arc.site
 	rfocx := site.X
 	rfocy := site.Y
 	pby2 := rfocy - directrix
+	v.Logger.Info("\t[f-for-add-bs-for-left-bp] (Расстояние) Правая точка пересечения", zap.Float64("right", pby2))
 	if pby2 == 0 {
 		return rfocx
 	}
@@ -105,21 +107,28 @@ func (v *Voronoi) leftBreakPoint(arc *BeachSection, directrix float64) float64 {
 	lfocx := site.X
 	lfocy := site.Y
 	plby2 := lfocy - directrix
+	v.Logger.Info("[f-for-add-bs-for-left-bp] (Расстояние) Левая точка пересечения", zap.Float64("left", plby2))
 	if plby2 == 0 {
 		return lfocx
 	}
 	hl := lfocx - rfocx
 	aby2 := 1/pby2 - 1/plby2
 	b := hl / plby2
+	var res float64
 	if aby2 != 0 {
-		return (-b+math.Sqrt(b*b-2*aby2*(hl*hl/(-2*plby2)-lfocy+plby2/2+rfocy-pby2/2)))/aby2 + rfocx
+		res = (-b+math.Sqrt(b*b-2*aby2*(hl*hl/(-2*plby2)-lfocy+plby2/2+rfocy-pby2/2)))/aby2 + rfocx
+		v.Logger.Info("[f-for-add-bs-for-left-bp] Результат", zap.Float64("res", res))
+		return res
 	}
-	return (rfocx + lfocx) / 2
+	res = (rfocx + lfocx) / 2
+	v.Logger.Info("[f-for-add-bs-for-left-bp] Результат", zap.Float64("res", res))
+	return res
 }
 
 func (v *Voronoi) rightBreakPoint(arc *BeachSection, directrix float64) float64 {
 	rArc := arc.Node().next
 	if rArc != nil {
+		v.Logger.Info("[f-for-add-bs-for-right-bp] Правая nil, идем налево")
 		return v.leftBreakPoint(rArc.value.(*BeachSection), directrix)
 	}
 	site := arc.site
@@ -134,8 +143,10 @@ func (s *Voronoi) detachBeachSection(arc *BeachSection) {
 	s.beachline.removeNode(arc.node)
 }
 
-func (s *Voronoi) removeBeachSection(bs *BeachSection) {
+func (v *Voronoi) removeBeachSection(bs *BeachSection) {
+	v.Logger.Info("[f-for-rm-bs-for] Начало rm bs", zap.Any("site_bs", bs.circleEvent.site))
 	circle := bs.circleEvent
+	v.Logger.Info("[f-for-rm-bs-for] Текущее событие круга", zap.Float64("site_bs_x", bs.circleEvent.x), zap.Float64("site_bs_y", bs.circleEvent.y))
 	x := circle.x
 	y := circle.ycenter
 	vertex := Vertex{x, y}
@@ -144,7 +155,7 @@ func (s *Voronoi) removeBeachSection(bs *BeachSection) {
 	disappearingTransitions := BeachSectionPtrs{bs}
 	abs_fn := math.Abs
 
-	s.detachBeachSection(bs)
+	v.detachBeachSection(bs)
 
 	lArc := previous.value.(*BeachSection)
 	for lArc.circleEvent != nil &&
@@ -153,12 +164,12 @@ func (s *Voronoi) removeBeachSection(bs *BeachSection) {
 
 		previous = lArc.node.previous
 		disappearingTransitions.appendLeft(lArc)
-		s.detachBeachSection(lArc)
+		v.detachBeachSection(lArc)
 		lArc = previous.value.(*BeachSection)
 	}
 
 	disappearingTransitions.appendLeft(lArc)
-	s.detachCircleEvent(lArc)
+	v.detachCircleEvent(lArc)
 
 	var rArc = next.value.(*BeachSection)
 	for rArc.circleEvent != nil &&
@@ -166,12 +177,12 @@ func (s *Voronoi) removeBeachSection(bs *BeachSection) {
 		abs_fn(y-rArc.circleEvent.ycenter) < 1e-9 {
 		next = rArc.node.next
 		disappearingTransitions.appendRight(rArc)
-		s.detachBeachSection(rArc) // mark for reuse
+		v.detachBeachSection(rArc)
 		rArc = next.value.(*BeachSection)
 	}
 
 	disappearingTransitions.appendRight(rArc)
-	s.detachCircleEvent(rArc)
+	v.detachCircleEvent(rArc)
 
 	nArcs := len(disappearingTransitions)
 
@@ -179,25 +190,25 @@ func (s *Voronoi) removeBeachSection(bs *BeachSection) {
 		rArc = disappearingTransitions[iArc]
 		lArc = disappearingTransitions[iArc-1]
 
-		lSite := s.cell(lArc.site)
-		rSite := s.cell(rArc.site)
+		lSite := v.cell(lArc.site)
+		rSite := v.cell(rArc.site)
 
-		s.setEdgeStartpoint(rArc.edge, lSite, rSite, vertex)
+		v.setEdgeStartpoint(rArc.edge, lSite, rSite, vertex)
 	}
 
 	lArc = disappearingTransitions[0]
 	rArc = disappearingTransitions[nArcs-1]
-	lSite := s.cell(lArc.site)
-	rSite := s.cell(rArc.site)
+	lSite := v.cell(lArc.site)
+	rSite := v.cell(rArc.site)
 
-	rArc.edge = s.createEdge(lSite, rSite, NO_VERTEX, vertex)
+	rArc.edge = v.createEdge(lSite, rSite, NO_VERTEX, vertex)
 
-	s.attachCircleEvent(lArc)
-	s.attachCircleEvent(rArc)
+	v.attachCircleEvent(lArc)
+	v.attachCircleEvent(rArc)
 }
 
 func (v *Voronoi) addBeachSection(site Vertex) {
-	v.Logger.Info("[f-add-bs] Входные параметры", zap.Any("site", site))
+	v.Logger.Info("[f-for-add-bs] Входные параметры", zap.Any("site", site))
 	// позиция по X
 	x := site.X
 	// линия текущей позиции прямого сканирования
@@ -217,26 +228,28 @@ func (v *Voronoi) addBeachSection(site Vertex) {
 	var dxl, dxr float64
 	node := v.beachline.root
 
-	v.Logger.Info("[f-add-bs] Текущая нода", zap.Any("node", node))
+	v.Logger.Info("[f-for-add-bs] Текущая нода", zap.Any("node", node))
 	// пока нода не равна nil. Это поиск места для новой дуги
 	// Цикл перебирает дуги на beach line (ДУГИ ПАРАБОЛ), чтобы найти место для новой дуги
 	for node != nil {
 		// вычисляем левую точку пересечения параболы
 		nodeBeachline := node.value.(*BeachSection)
+		// вычисляем разницу между координатой X новой точки
+		// и левой точкой пересечения текущей параболы с прямой сканирования.
 		dxl = v.leftBreakPoint(nodeBeachline, directrix) - x
 
-		v.Logger.Info("[f-add-bs-for] Точка из ноды", zap.Any("site", nodeBeachline.site))
-		v.Logger.Info("[f-add-bs-for] Левая точка пересечения параболы", zap.Float64("dxl", dxl))
+		v.Logger.Info("[f-for-add-bs-for] Точка из ноды", zap.Any("site", nodeBeachline.site))
+		v.Logger.Info("[f-for-add-bs-for] Левая точка пересечения параболы", zap.Float64("dxl", dxl))
 
 		if dxl > 1e-9 {
-			v.Logger.Info("[f-add-bs-for] Новая точка находится СЛЕВА от текущей дуги (параболы)",
+			v.Logger.Info("[f-for-add-bs-for] Новая точка находится СЛЕВА от текущей дуги (параболы)",
 				zap.Float64("dxl", dxl),
 			)
 			node = node.left
 		} else {
 			dxr = x - v.rightBreakPoint(nodeBeachline, directrix)
 			if dxr > 1e-9 {
-				v.Logger.Info("[f-add-bs-for] Новая точка находится СПРАВА от текущей дуги (параболы)",
+				v.Logger.Info("[f-for-add-bs-for] Новая точка находится СПРАВА от текущей дуги (параболы)",
 					zap.Float64("dxr", dxr),
 				)
 				if node.right == nil {
@@ -245,23 +258,23 @@ func (v *Voronoi) addBeachSection(site Vertex) {
 				}
 				node = node.right
 			} else {
-				v.Logger.Info("[f-add-bs-for] Новая точка находится МЕЖДУ ДУГАМИ",
+				v.Logger.Info("[f-for-add-bs-for] Новая точка находится МЕЖДУ ДУГАМИ",
 					zap.Float64("dxr", dxr),
 				)
 				if dxl > -1e-9 {
-					v.Logger.Info("[f-add-bs-for] Новая точка совпадает с ЛЕВОЙ границей дуги",
+					v.Logger.Info("[f-for-add-bs-for] Новая точка совпадает с ЛЕВОЙ границей дуги",
 						zap.Float64("dxl", dxl),
 					)
 					lNode = node.previous
 					rNode = node
 				} else if dxr > -1e-9 {
-					v.Logger.Info("[f-add-bs-for] Новая точка совпадает с ПРАВОЙ границей дуги",
+					v.Logger.Info("[f-for-add-bs-for] Новая точка совпадает с ПРАВОЙ границей дуги",
 						zap.Float64("dxr", dxr),
 					)
 					lNode = node
 					rNode = node.next
 				} else {
-					v.Logger.Info("[f-add-bs-for] Новая точка находится ВНУТРИ текущей дуги",
+					v.Logger.Info("[f-for-add-bs-for] Новая точка находится ВНУТРИ текущей дуги",
 						zap.Float64("dxl", dxl),
 						zap.Float64("dxr", dxr),
 					)
@@ -276,6 +289,7 @@ func (v *Voronoi) addBeachSection(site Vertex) {
 	v.Logger.Info("[f-add-bs] Позиция для новой дуги найдена")
 	var lArc, rArc *BeachSection
 
+	// достаем левую и правую дуги (если имеются)
 	if lNode != nil {
 		lArc = lNode.value.(*BeachSection)
 	}
@@ -284,6 +298,7 @@ func (v *Voronoi) addBeachSection(site Vertex) {
 		rArc = rNode.value.(*BeachSection)
 	}
 
+	// создаем новую дугу (параболу)
 	newArc := &BeachSection{site: site}
 	if lArc == nil {
 		v.beachline.insertSuccessor(nil, newArc)
@@ -291,11 +306,14 @@ func (v *Voronoi) addBeachSection(site Vertex) {
 		v.beachline.insertSuccessor(lArc.node, newArc)
 	}
 
+	// если обе неопределены, то возвращаемся, ибо наша дуга первая
 	if lArc == nil && rArc == nil {
 		return
 	}
 
+	// если новая дуга делит существующую на 2 (находимся внутри дуги)
 	if lArc == rArc {
+		// удаляем событие круга, связанное с lArc
 		v.detachCircleEvent(lArc)
 
 		rArc = &BeachSection{site: lArc.site}
@@ -373,20 +391,20 @@ func (s *Voronoi) attachCircleEvent(arc *BeachSection) {
 	if lArc == nil || rArc == nil {
 		return // does that ever happen?
 	}
-	LeftSite := lArc.value.(*BeachSection).site
+	lSite := lArc.value.(*BeachSection).site
 	cSite := arc.site
-	RightSite := rArc.value.(*BeachSection).site
+	rSite := rArc.value.(*BeachSection).site
 
-	if LeftSite == RightSite {
+	if lSite == rSite {
 		return
 	}
 
 	bx := cSite.X
 	by := cSite.Y
-	ax := LeftSite.X - bx
-	ay := LeftSite.Y - by
-	cx := RightSite.X - bx
-	cy := RightSite.Y - by
+	ax := lSite.X - bx
+	ay := lSite.Y - by
+	cx := rSite.X - bx
+	cy := rSite.Y - by
 
 	d := 2 * (ax*cy - ay*cx)
 	if d >= -2e-12 {
@@ -435,17 +453,18 @@ func (s *Voronoi) attachCircleEvent(arc *BeachSection) {
 	}
 }
 
-func (s *Voronoi) detachCircleEvent(arc *BeachSection) {
+func (v *Voronoi) detachCircleEvent(arc *BeachSection) {
 	circle := arc.circleEvent
 	if circle != nil {
 		if circle.node.previous == nil {
 			if circle.node.next != nil {
-				s.firstCircleEvent = circle.node.next.value.(*circleEvent)
+				v.firstCircleEvent = circle.node.next.value.(*circleEvent)
+				v.Logger.Info("[f-for-rm-bs-detach-ce] Первое событие круга", zap.Float64("ce_x", v.firstCircleEvent.x), zap.Float64("ce_y", v.firstCircleEvent.y))
 			} else {
-				s.firstCircleEvent = nil
+				v.firstCircleEvent = nil
 			}
 		}
-		s.circleEvents.removeNode(circle.node)
+		v.circleEvents.removeNode(circle.node)
 		arc.circleEvent = nil
 	}
 }
@@ -460,6 +479,7 @@ func NewBoundingBox(xl, xr, yt, yb float64) BoundingBox {
 	return BoundingBox{xl, xr, yt, yb}
 }
 
+// функция для дополнения всех ребер с bbox (в самом конце, когда еще параболы/дуги остались)
 func connectEdge(edge *edge, bbox BoundingBox) bool {
 	vb := edge.Vb.Vertex
 	if vb != NO_VERTEX {
@@ -471,28 +491,31 @@ func connectEdge(edge *edge, bbox BoundingBox) bool {
 	xr := bbox.Xr
 	yt := bbox.Yt
 	yb := bbox.Yb
-	LeftSite := edge.LeftCell.Site
-	RightSite := edge.RightCell.Site
-	lx := LeftSite.X
-	ly := LeftSite.Y
-	rx := RightSite.X
-	ry := RightSite.Y
+	lSite := edge.LeftCell.site
+	rSite := edge.RightCell.site
+	lx := lSite.X
+	ly := lSite.Y
+	rx := rSite.X
+	ry := rSite.Y
 	fx := (lx + rx) / 2
 	fy := (ly + ry) / 2
 
 	var fm, fb float64
 
-	if !equalEpsilon(ry, ly) {
+	// определение наклона ребра fm и смещения fb
+	if !equalEps(ry, ly) {
+		// если ry == ly, значит наклона нет (вертикальная линия)
 		fm = (lx - rx) / (ry - ly)
 		fb = fy - fm*fx
 	}
 
-	if equalEpsilon(ry, ly) {
-		// doesn't intersect with viewport
+	// вертикальное
+	if equalEps(ry, ly) {
+		// вышли за границы, не надо соедпинять
 		if fx < xl || fx >= xr {
 			return false
 		}
-		// downward
+		// вниз
 		if lx > rx {
 			if va == NO_VERTEX {
 				va = Vertex{fx, yt}
@@ -500,7 +523,7 @@ func connectEdge(edge *edge, bbox BoundingBox) bool {
 				return false
 			}
 			vb = Vertex{fx, yb}
-			// upward
+			// иначе вверх
 		} else {
 			if va == NO_VERTEX {
 				va = Vertex{fx, yb}
@@ -511,7 +534,7 @@ func connectEdge(edge *edge, bbox BoundingBox) bool {
 		}
 
 	} else if fm < -1 || fm > 1 {
-		// downward
+		// вниз
 		if lx > rx {
 			if va == NO_VERTEX {
 				va = Vertex{(yt - fb) / fm, yt}
@@ -519,7 +542,7 @@ func connectEdge(edge *edge, bbox BoundingBox) bool {
 				return false
 			}
 			vb = Vertex{(yb - fb) / fm, yb}
-			// upward
+			// вверх
 		} else {
 			if va == NO_VERTEX {
 				va = Vertex{(yb - fb) / fm, yb}
@@ -530,7 +553,7 @@ func connectEdge(edge *edge, bbox BoundingBox) bool {
 		}
 
 	} else {
-		// rightward
+		// вправо
 		if ly < ry {
 			if va == NO_VERTEX {
 				va = Vertex{xl, fm*xl + fb}
@@ -538,7 +561,7 @@ func connectEdge(edge *edge, bbox BoundingBox) bool {
 				return false
 			}
 			vb = Vertex{xr, fm*xr + fb}
-			// leftward
+			// влево
 		} else {
 			if va == NO_VERTEX {
 				va = Vertex{xr, fm*xr + fb}
@@ -553,6 +576,8 @@ func connectEdge(edge *edge, bbox BoundingBox) bool {
 	return true
 }
 
+// обрезаем ребро, если за границы вышло
+// используется алгоритм Лианга-Барски
 func clipEdge(edge *edge, bbox BoundingBox) bool {
 	ax := edge.Va.X
 	ay := edge.Va.Y
@@ -563,7 +588,7 @@ func clipEdge(edge *edge, bbox BoundingBox) bool {
 	dx := bx - ax
 	dy := by - ay
 
-	// left
+	// влево
 	q := ax - bbox.Xl
 	if dx == 0 && q < 0 {
 		return false
@@ -582,7 +607,7 @@ func clipEdge(edge *edge, bbox BoundingBox) bool {
 			t0 = r
 		}
 	}
-	// right
+	// вправо
 	q = bbox.Xr - ax
 	if dx == 0 && q < 0 {
 		return false
@@ -602,7 +627,7 @@ func clipEdge(edge *edge, bbox BoundingBox) bool {
 		}
 	}
 
-	// top
+	// вверх
 	q = ay - bbox.Yt
 	if dy == 0 && q < 0 {
 		return false
@@ -621,7 +646,7 @@ func clipEdge(edge *edge, bbox BoundingBox) bool {
 			t0 = r
 		}
 	}
-	// bottom
+	// вниз
 	q = bbox.Yb - ay
 	if dy == 0 && q < 0 {
 		return false
@@ -652,107 +677,114 @@ func clipEdge(edge *edge, bbox BoundingBox) bool {
 	return true
 }
 
-func equalEpsilon(a, b float64) bool {
+func equalEps(a, b float64) bool {
 	return math.Abs(a-b) < 1e-9
 }
 
-func lessThanEpsilon(a, b float64) bool {
+func lessThanEps(a, b float64) bool {
 	return b-a > 1e-9
 }
 
-func greaterThanEpsilon(a, b float64) bool {
+func moreThanEps(a, b float64) bool {
 	return a-b > 1e-9
 }
 
-func (s *Voronoi) clipEdges(bbox BoundingBox) {
+// ограничиваем все ребра (отрезки), чтоб за гр bbox не вышли
+func (v *Voronoi) clipEdges(bbox BoundingBox) {
 	abs_fn := math.Abs
 
-	for i := len(s.edges) - 1; i >= 0; i-- {
-		edge := s.edges[i]
+	for i := len(v.edges) - 1; i >= 0; i-- {
+		edge := v.edges[i]
 
 		if !connectEdge(edge, bbox) || !clipEdge(edge, bbox) || (abs_fn(edge.Va.X-edge.Vb.X) < 1e-9 && abs_fn(edge.Va.Y-edge.Vb.Y) < 1e-9) {
 			edge.Va.Vertex = NO_VERTEX
 			edge.Vb.Vertex = NO_VERTEX
-			s.edges[i] = s.edges[len(s.edges)-1]
-			s.edges = s.edges[0 : len(s.edges)-1]
+			v.edges[i] = v.edges[len(v.edges)-1]
+			v.edges = v.edges[0 : len(v.edges)-1]
 		}
 	}
+	//v.Logger.Info("[f-for-rm-bs-detach-ce] Первое событие круга", zap.Float64("ce_x", v.firstCircleEvent.x), zap.Float64("ce_y", v.firstCircleEvent.y))
 }
 
-func (s *Voronoi) closeCells(bbox BoundingBox) {
-	xl := bbox.Xl
-	xr := bbox.Xr
-	yt := bbox.Yt
-	yb := bbox.Yb
-	cells := s.cells
-	abs_fn := math.Abs
+// закрываем ячейки, гарантируя, что каждая ячейка внутри bbox
+func (v *Voronoi) closeCells(bbox BoundingBox) {
+	left := bbox.Xl
+	right := bbox.Xr
+	top := bbox.Yt
+	bottom := bbox.Yb
+	cells := v.cells
 
 	for _, cell := range cells {
+		// Пропускаем ячейки без рёбер
 		if cell.prepare() == 0 {
 			continue
 		}
 
-		halfedges := cell.Halfedges
-		nHalfedges := len(halfedges)
+		halfEdges := cell.halfEdges
+		numHalfEdges := len(halfEdges)
 
-		iLeft := 0
-		for iLeft < nHalfedges {
-			iRight := (iLeft + 1) % nHalfedges
-			endpoint := halfedges[iLeft].endPoint()
-			startpoint := halfedges[iRight].startPoint()
-			if abs_fn(endpoint.X-startpoint.X) >= 1e-9 || abs_fn(endpoint.Y-startpoint.Y) >= 1e-9 {
-				va := endpoint
-				vb := endpoint
-				if equalEpsilon(endpoint.X, xl) && lessThanEpsilon(endpoint.Y, yb) {
-					if equalEpsilon(startpoint.X, xl) {
-						vb = Vertex{xl, startpoint.Y}
+		currentEdgeIdx := 0
+		for currentEdgeIdx < numHalfEdges {
+			nextEdgeIdx := (currentEdgeIdx + 1) % numHalfEdges
+			endPoint := halfEdges[currentEdgeIdx].endPoint()
+			startPoint := halfEdges[nextEdgeIdx].startPoint()
+
+			// Проверка на наличие зазора между текущим и следующим полурёбрами
+			if math.Abs(endPoint.X-startPoint.X) >= 1e-9 || math.Abs(endPoint.Y-startPoint.Y) >= 1e-9 {
+				startVertex := endPoint
+				endVertex := endPoint
+
+				// Идём вниз вдоль левой границы
+				if equalEps(endPoint.X, left) && lessThanEps(endPoint.Y, bottom) {
+					if equalEps(startPoint.X, left) {
+						endVertex = Vertex{left, startPoint.Y}
 					} else {
-						vb = Vertex{xl, yb}
+						endVertex = Vertex{left, bottom}
 					}
 
-					// walk rightward along bottom side
-				} else if equalEpsilon(endpoint.Y, yb) && lessThanEpsilon(endpoint.X, xr) {
-					if equalEpsilon(startpoint.Y, yb) {
-						vb = Vertex{startpoint.X, yb}
+					// Идём вправо вдоль нижней границы
+				} else if equalEps(endPoint.Y, bottom) && lessThanEps(endPoint.X, right) {
+					if equalEps(startPoint.Y, bottom) {
+						endVertex = Vertex{startPoint.X, bottom}
 					} else {
-						vb = Vertex{xr, yb}
+						endVertex = Vertex{right, bottom}
 					}
-					// walk upward along right side
-				} else if equalEpsilon(endpoint.X, xr) && greaterThanEpsilon(endpoint.Y, yt) {
-					if equalEpsilon(startpoint.X, xr) {
-						vb = Vertex{xr, startpoint.Y}
+
+					// Идём вверх вдоль правой границы
+				} else if equalEps(endPoint.X, right) && moreThanEps(endPoint.Y, top) {
+					if equalEps(startPoint.X, right) {
+						endVertex = Vertex{right, startPoint.Y}
 					} else {
-						vb = Vertex{xr, yt}
+						endVertex = Vertex{right, top}
 					}
-					// walk leftward along top side
-				} else if equalEpsilon(endpoint.Y, yt) && greaterThanEpsilon(endpoint.X, xl) {
-					if equalEpsilon(startpoint.Y, yt) {
-						vb = Vertex{startpoint.X, yt}
+
+					// Идём влево вдоль верхней границы
+				} else if equalEps(endPoint.Y, top) && moreThanEps(endPoint.X, left) {
+					if equalEps(startPoint.Y, top) {
+						endVertex = Vertex{startPoint.X, top}
 					} else {
-						vb = Vertex{xl, yt}
+						endVertex = Vertex{left, top}
 					}
-				} else {
-					//			break
 				}
 
-				edge := s.createBorderEdge(cell, va, vb)
-				cell.Halfedges = append(cell.Halfedges, nil)
-				halfedges = cell.Halfedges
-				nHalfedges = len(halfedges)
+				newEdge := v.createBorderEdge(cell, startVertex, endVertex)
+				cell.halfEdges = append(cell.halfEdges, nil)
+				halfEdges = cell.halfEdges
+				numHalfEdges = len(halfEdges)
 
-				copy(halfedges[iLeft+2:], halfedges[iLeft+1:len(halfedges)-1])
-				halfedges[iLeft+1] = newHalfEdge(edge, cell, nil)
-
+				// Вставляем новое полуребро для замыкания ячейки
+				copy(halfEdges[currentEdgeIdx+2:], halfEdges[currentEdgeIdx+1:len(halfEdges)-1])
+				halfEdges[currentEdgeIdx+1] = newHalfEdge(newEdge, cell, nil)
 			}
-			iLeft++
+			currentEdgeIdx++
 		}
 	}
 }
 
-func (s *Voronoi) gatherVertexEdges() {
+func (v *Voronoi) gatherVertexEdges() {
 	vertexEdgeMap := make(map[Vertex][]*edge)
 
-	for _, edge := range s.edges {
+	for _, edge := range v.edges {
 		vertexEdgeMap[edge.Va.Vertex] = append(
 			vertexEdgeMap[edge.Va.Vertex], edge)
 		vertexEdgeMap[edge.Vb.Vertex] = append(
