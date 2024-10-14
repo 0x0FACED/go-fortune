@@ -19,48 +19,47 @@ type rbtNode struct {
 	red      bool
 }
 
-func (t *rbt) insertSuccessor(node *rbtNode, vsuccessor rbtNodeValue) {
-	successor := &rbtNode{value: vsuccessor}
-	vsuccessor.bindToNode(successor)
+func (t *rbt) insertSuccessor(node *rbtNode, vSucc rbtNodeValue) {
+	succ := &rbtNode{value: vSucc}
+	vSucc.bindToNode(succ)
 
 	var parent *rbtNode
 	if node != nil {
-		successor.previous = node
-		successor.next = node.next
+		succ.previous = node
+		succ.next = node.next
 		if node.next != nil {
-			node.next.previous = successor
+			node.next.previous = succ
 		}
-		node.next = successor
+		node.next = succ
 		if node.right != nil {
-			// in-place expansion of node.rbRight.getFirst()
 			node = node.right
 			for ; node.left != nil; node = node.left {
 			}
-			node.left = successor
+			node.left = succ
 		} else {
-			node.right = successor
+			node.right = succ
 		}
 		parent = node
 
 	} else if t.root != nil {
 		node = t.getFirst(t.root)
-		successor.previous = nil
-		successor.next = node
-		node.previous = successor
-		node.left = successor
+		succ.previous = nil
+		succ.next = node
+		node.previous = succ
+		node.left = succ
 		parent = node
 	} else {
-		successor.previous = nil
-		successor.next = nil
-		t.root = successor
+		succ.previous = nil
+		succ.next = nil
+		t.root = succ
 		parent = nil
 	}
-	successor.left = nil
-	successor.right = nil
-	successor.parent = parent
-	successor.red = true
+	succ.left = nil
+	succ.right = nil
+	succ.parent = parent
+	succ.red = true
 	var grandpa, uncle *rbtNode
-	node = successor
+	node = succ
 	for parent != nil && parent.red {
 		grandpa = parent.parent
 		if parent == grandpa.left {
