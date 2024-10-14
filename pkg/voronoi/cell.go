@@ -2,17 +2,17 @@ package voronoi
 
 import "sort"
 
-type Cell struct {
-	Site      Vertex
-	Halfedges []*halfEdge
+type cell struct {
+	site      Vertex
+	halfEdges []*halfEdge
 }
 
-func newCell(site Vertex) *Cell {
-	return &Cell{Site: site}
+func newCell(site Vertex) *cell {
+	return &cell{site: site}
 }
 
-func (t *Cell) prepare() int {
-	halfedges := t.Halfedges
+func (t *cell) prepare() int {
+	halfedges := t.halfEdges
 	iHalfedge := len(halfedges) - 1
 
 	for ; iHalfedge >= 0; iHalfedge-- {
@@ -25,6 +25,6 @@ func (t *Cell) prepare() int {
 	}
 
 	sort.Sort(halfEdgesByAngle{halfedges})
-	t.Halfedges = halfedges
+	t.halfEdges = halfedges
 	return len(halfedges)
 }
