@@ -26,13 +26,13 @@ type edgeVertex struct {
 }
 
 type edge struct {
-	LeftCell  *Cell
-	RightCell *Cell
+	LeftCell  *cell
+	RightCell *cell
 	Va        edgeVertex
 	Vb        edgeVertex
 }
 
-func newEdge(LeftCell, RightCell *Cell) *edge {
+func newEdge(LeftCell, RightCell *cell) *edge {
 	return &edge{
 		LeftCell:  LeftCell,
 		RightCell: RightCell,
@@ -42,7 +42,7 @@ func newEdge(LeftCell, RightCell *Cell) *edge {
 }
 
 type halfEdge struct {
-	Cell  *Cell
+	Cell  *cell
 	Edge  *edge
 	Angle float64
 }
@@ -56,14 +56,14 @@ type halfEdgesByAngle struct{ halfEdges }
 
 func (s halfEdgesByAngle) Less(i, j int) bool { return s.halfEdges[i].Angle > s.halfEdges[j].Angle }
 
-func newHalfEdge(edge *edge, LeftCell, RightCell *Cell) *halfEdge {
+func newHalfEdge(edge *edge, LeftCell, RightCell *cell) *halfEdge {
 	ret := &halfEdge{
 		Cell: LeftCell,
 		Edge: edge,
 	}
 
 	if RightCell != nil {
-		ret.Angle = math.Atan2(RightCell.Site.Y-LeftCell.Site.Y, RightCell.Site.X-LeftCell.Site.X)
+		ret.Angle = math.Atan2(RightCell.site.Y-LeftCell.site.Y, RightCell.site.X-LeftCell.site.X)
 	} else {
 		va := edge.Va
 		vb := edge.Vb
