@@ -186,7 +186,7 @@ func diagramHandler(w http.ResponseWriter, r *http.Request) {
 	logger := logger.New()
 	defer logger.ClearLogs()
 
-	diagram := voronoi.CreateDiagram(points, bbox, true, logger)
+	diagram := voronoi.CreateDiagram(points, bbox, false, logger)
 
 	scatter := voronoiToEcharts(stations, diagram)
 
